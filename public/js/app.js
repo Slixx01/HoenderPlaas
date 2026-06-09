@@ -239,11 +239,19 @@ async function loadFlock(flockId) {
     availableDays = data.days;
     populateSelect("w-day-select", availableDays);
     populateSelect("m-day-select", availableDays);
-    // highlight selected flock card
-    document.querySelectorAll(".flock-card").forEach(c => c.classList.remove("selected-flock"));
+    // move current badge and highlight to selected flock
+    document.querySelectorAll(".flock-card").forEach(c => {
+      c.classList.remove("selected-flock", "current");
+      const badge = c.querySelector(".fc-badge");
+      if (badge) badge.remove();
+    });
     document.querySelectorAll(".flock-card").forEach(c => {
       if (c.querySelector(".fc-num").textContent === `Flock ${flockId}`) {
-        c.classList.add("selected-flock");
+        c.classList.add("current", "selected-flock");
+        const badge = document.createElement("span");
+        badge.className = "fc-badge";
+        badge.textContent = "CURRENT";
+        c.appendChild(badge);
       }
     });
     document.getElementById("hdr-flock").textContent = `Flock ${flockId}`;
