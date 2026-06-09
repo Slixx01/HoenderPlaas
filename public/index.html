@@ -1,253 +1,259 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Poultry Operations Dashboard</title>
-  <link rel="stylesheet" href="css/style.css" />
+  <title>Poultry Ops Dashboard</title>
+  <link rel="stylesheet" href="/css/style.css"/>
 </head>
 <body>
 
-  <!-- ── HEADER ── -->
-  <header class="header">
-    <div class="header-left">
-      <span class="logo">🐔</span>
+<!-- ══ UPLOAD SCREEN ══════════════════════════════════════════════════════ -->
+<div id="upload-screen" class="upload-screen">
+  <div class="upload-inner">
+    <div class="upload-brand">🐔</div>
+    <h1 class="upload-title">Poultry Ops Dashboard</h1>
+    <p class="upload-sub">Upload your workbook to get started — sheets 3 & 4 are parsed automatically.</p>
+    <label class="upload-drop" id="drop-zone">
+      <div class="drop-icon">📂</div>
+      <span class="drop-label">Drop your <strong>.xlsx</strong> file here, or <u>browse</u></span>
+      <input type="file" id="file-input" accept=".xlsx,.xls" style="display:none"/>
+    </label>
+    <p class="upload-hint">Expects: <em>Dayly Weight</em> (sheet 3) · <em>Daily Morts</em> (sheet 4)</p>
+  </div>
+</div>
+
+<!-- ══ APP ════════════════════════════════════════════════════════════════ -->
+<div id="app" class="app" style="display:none">
+
+  <!-- Header -->
+  <header class="hdr">
+    <div class="hdr-left">
+      <span class="hdr-logo">🐔</span>
       <div>
-        <h1>Poultry Operations Dashboard</h1>
-        <p class="subtitle" id="loaded-file">No data loaded — upload your workbook to begin</p>
+        <div class="hdr-title">Poultry Ops</div>
+        <div class="hdr-meta" id="hdr-meta">—</div>
       </div>
     </div>
-    <div class="header-right">
-      <label class="upload-btn" for="file-input">
-        📂 Load Workbook
-        <input type="file" id="file-input" accept=".xlsx,.xls" style="display:none"/>
+    <div class="hdr-right">
+      <div class="flock-pill" id="hdr-flock">Flock —</div>
+      <label class="hdr-reload" title="Load new workbook">
+        ↺ New File
+        <input type="file" id="file-reload" accept=".xlsx,.xls" style="display:none"/>
       </label>
     </div>
   </header>
 
-  <!-- ── UPLOAD OVERLAY ── -->
-  <div id="upload-overlay" class="upload-overlay">
-    <div class="upload-card">
-      <div class="upload-icon">📊</div>
-      <h2>Upload Your Workbook</h2>
-      <p>Drop your Excel file here or click Browse to get started.</p>
-      <label class="upload-btn large" for="file-input-center">
-        Browse File
-        <input type="file" id="file-input-center" accept=".xlsx,.xls" style="display:none"/>
-      </label>
-      <p class="upload-hint">Expects sheets: <em>Dayly Weight</em> and <em>Daily Morts</em></p>
-    </div>
-  </div>
+  <!-- Main nav tabs -->
+  <nav class="main-nav">
+    <button class="mnav-btn active" data-tab="weight">
+      <span class="mnav-icon">⚖️</span> Weight Report
+    </button>
+    <button class="mnav-btn" data-tab="mortality">
+      <span class="mnav-icon">💀</span> Mortality Report
+    </button>
+  </nav>
 
-  <!-- ── MAIN CONTENT ── -->
-  <main class="main" id="main-content" style="display:none">
+  <main class="main">
 
-    <!-- ── SHEET TABS ── -->
-    <div class="sheet-tabs">
-      <button class="sheet-tab active" data-sheet="weight">📊 Weight Report</button>
-      <button class="sheet-tab" data-sheet="mortality">💀 Mortality Report</button>
-    </div>
+    <!-- ══ WEIGHT TAB ════════════════════════════════════════════════════ -->
+    <section id="tab-weight" class="tab-pane active">
 
-    <!-- ══════════════════════════════════════════════════════════════ -->
-    <!-- WEIGHT SHEET -->
-    <!-- ══════════════════════════════════════════════════════════════ -->
-    <div id="weight-sheet" class="sheet-content active">
-
-    <!-- ── QUERY BAR ── -->
-    <section class="query-bar">
-      <div class="query-controls">
-        <div class="control-group">
-          <label for="day-select">Select Day</label>
-          <select id="day-select">
-            <option value="">-- choose day --</option>
-          </select>
+      <!-- Query bar -->
+      <div class="qbar">
+        <div class="qbar-group">
+          <label>Day</label>
+          <select id="w-day-select"><option value="">Select…</option></select>
         </div>
-        <div class="control-group">
-          <label for="threshold-input">Alert Threshold (%)</label>
-          <input type="number" id="threshold-input" value="5" min="0" max="100" step="0.5"/>
+        <div class="qbar-group">
+          <label>Alert Threshold (%)</label>
+          <input type="number" id="w-threshold" value="5" min="0" max="100" step="0.5"/>
         </div>
-        <button class="run-btn" id="run-query">Run Report</button>
+        <button class="run-btn" id="w-run">Run Report</button>
       </div>
-    </section>
 
-    <!-- ── SUMMARY CARDS ── -->
-    <section class="cards" id="summary-cards" style="display:none">
-      <div class="card">
-        <div class="card-label">Current Flock</div>
-        <div class="card-value" id="card-flock">—</div>
-      </div>
-      <div class="card">
-        <div class="card-label">Day</div>
-        <div class="card-value" id="card-day">—</div>
-      </div>
-      <div class="card">
-        <div class="card-label">3-Cycle Avg Weight</div>
-        <div class="card-value" id="card-avg">—</div>
-        <div class="card-sub">grams</div>
-      </div>
-      <div class="card card-warn">
-        <div class="card-label">Houses Below Avg</div>
-        <div class="card-value" id="card-below">—</div>
-      </div>
-      <div class="card card-good">
-        <div class="card-label">Houses Above Avg</div>
-        <div class="card-value" id="card-above">—</div>
-      </div>
-    </section>
-
-    <!-- ── RESULTS TABLE ── -->
-    <section class="table-section" id="results-section" style="display:none">
-      <div class="section-header">
-        <h2>House Performance Report</h2>
-        <div class="legend">
-          <span class="badge badge-below">Below threshold</span>
-          <span class="badge badge-above">Above threshold</span>
-          <span class="badge badge-ok">Within range</span>
+      <!-- KPI strip -->
+      <div class="kpi-strip" id="w-kpis" style="display:none">
+        <div class="kpi">
+          <div class="kpi-label">Current Flock</div>
+          <div class="kpi-val" id="w-k-flock">—</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Day</div>
+          <div class="kpi-val" id="w-k-day">—</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">3-Cycle Avg</div>
+          <div class="kpi-val" id="w-k-avg">—</div>
+          <div class="kpi-unit">g</div>
+        </div>
+        <div class="kpi kpi-danger">
+          <div class="kpi-label">Below Threshold</div>
+          <div class="kpi-val" id="w-k-below">—</div>
+          <div class="kpi-unit">houses</div>
+        </div>
+        <div class="kpi kpi-success">
+          <div class="kpi-label">Above Average</div>
+          <div class="kpi-val" id="w-k-above">—</div>
+          <div class="kpi-unit">houses</div>
         </div>
       </div>
-      <div class="table-wrap">
-        <table id="results-table">
-          <thead>
-            <tr>
-              <th>House</th>
-              <th>Weight (g)</th>
-              <th>3C Avg (g)</th>
-              <th>Difference (g)</th>
-              <th>% vs Avg</th>
-              <th>Daily Morts</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody id="results-body"></tbody>
-        </table>
+
+      <!-- Results table -->
+      <div class="panel" id="w-table-panel" style="display:none">
+        <div class="panel-hdr">
+          <h2>House Performance</h2>
+          <div class="legend-row">
+            <span class="leg leg-below">⬇ Under</span>
+            <span class="leg leg-ok">✓ On Track</span>
+            <span class="leg leg-above">⬆ Over</span>
+          </div>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>House</th>
+                <th>Weight (g)</th>
+                <th>3C Avg (g)</th>
+                <th>Diff (g)</th>
+                <th>% vs Avg</th>
+                <th>Daily Morts</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="w-tbody"></tbody>
+          </table>
+        </div>
+        <p class="tbl-hint">Click a row to view the trend chart for that house.</p>
       </div>
+
+      <!-- Trend chart -->
+      <div class="panel" id="w-chart-panel" style="display:none">
+        <div class="panel-hdr">
+          <h2 id="w-chart-title">House Trend</h2>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="pill-btn active" data-chart="weight">Weight</button>
+            <button class="pill-btn" data-chart="morts">Mortalities</button>
+            <button class="close-btn" id="w-close-chart">✕</button>
+          </div>
+        </div>
+        <canvas id="w-chart" height="110"></canvas>
+      </div>
+
+      <!-- Flock overview -->
+      <div class="panel" id="w-flocks-panel" style="display:none">
+        <div class="panel-hdr"><h2>All Flocks</h2></div>
+        <div class="flock-grid" id="w-flock-grid"></div>
+      </div>
+
     </section>
 
-    <!-- ── TREND CHART ── -->
-    <section class="chart-section" id="chart-section" style="display:none">
-      <div class="section-header">
-        <h2 id="chart-title">House Trend</h2>
-        <button class="close-chart" id="close-chart">✕ Close</button>
-      </div>
-      <div class="chart-tabs" id="chart-tabs">
-        <button class="tab-btn active" data-tab="weight">Weight</button>
-        <button class="tab-btn" data-tab="morts">Mortalities</button>
-      </div>
-      <canvas id="trend-chart" height="120"></canvas>
-    </section>
+    <!-- ══ MORTALITY TAB ═════════════════════════════════════════════════ -->
+    <section id="tab-mortality" class="tab-pane">
 
-    <!-- ── FLOCK OVERVIEW ── -->
-    <section class="flock-section">
-      <h2>Flock Overview</h2>
-      <div id="flock-cards" class="flock-grid"></div>
-    </section>
-
-    </div> <!-- END weight-sheet -->
-
-    <!-- ══════════════════════════════════════════════════════════════ -->
-    <!-- MORTALITY SHEET -->
-    <!-- ══════════════════════════════════════════════════════════════ -->
-    <div id="mortality-sheet" class="sheet-content" style="display:none">
-
-      <!-- ── REPORT TYPE TABS ── -->
-      <div class="report-tabs">
-        <button class="report-tab active" data-report="daily">📅 Daily Report</button>
-        <button class="report-tab" data-report="weekly">📊 Weekly Report</button>
+      <!-- Sub-nav -->
+      <div class="subnav">
+        <button class="subnav-btn active" data-sub="daily">Daily Report</button>
+        <button class="subnav-btn" data-sub="weekly">Weekly Breakdown</button>
+        <button class="subnav-btn" data-sub="cumulative">Cumulative</button>
       </div>
 
-      <!-- ── DAILY MORTALITY REPORT ── -->
-      <div id="mortality-daily" class="report-view active">
-        <section class="query-bar">
-          <div class="query-controls">
-            <div class="control-group">
-              <label for="mort-day-select">Select Day</label>
-              <select id="mort-day-select">
-                <option value="">-- choose day --</option>
-              </select>
-            </div>
-            <button class="run-btn" id="run-mort-query">Run Report</button>
+      <!-- DAILY VIEW -->
+      <div id="sub-daily" class="sub-pane active">
+        <div class="qbar">
+          <div class="qbar-group">
+            <label>Day</label>
+            <select id="m-day-select"><option value="">Select…</option></select>
           </div>
-        </section>
+          <button class="run-btn" id="m-run">Run Report</button>
+        </div>
 
-        <section class="cards" id="mort-summary-cards" style="display:none">
-          <div class="card">
-            <div class="card-label">Current Flock</div>
-            <div class="card-value" id="mort-card-flock">—</div>
+        <div class="kpi-strip" id="m-kpis" style="display:none">
+          <div class="kpi">
+            <div class="kpi-label">Flock</div>
+            <div class="kpi-val" id="m-k-flock">—</div>
           </div>
-          <div class="card">
-            <div class="card-label">Day</div>
-            <div class="card-value" id="mort-card-day">—</div>
+          <div class="kpi">
+            <div class="kpi-label">Day</div>
+            <div class="kpi-val" id="m-k-day">—</div>
           </div>
-          <div class="card card-warn">
-            <div class="card-label">Total Mortalities</div>
-            <div class="card-value" id="mort-card-total">—</div>
+          <div class="kpi kpi-danger">
+            <div class="kpi-label">Total Morts</div>
+            <div class="kpi-val" id="m-k-total">—</div>
+            <div class="kpi-unit">birds</div>
           </div>
-          <div class="card">
-            <div class="card-label">Avg per House</div>
-            <div class="card-value" id="mort-card-avg">—</div>
+          <div class="kpi">
+            <div class="kpi-label">3-Cycle Avg</div>
+            <div class="kpi-val" id="m-k-avg">—</div>
+            <div class="kpi-unit">per house</div>
           </div>
-        </section>
+          <div class="kpi">
+            <div class="kpi-label">Houses Reported</div>
+            <div class="kpi-val" id="m-k-houses">—</div>
+          </div>
+        </div>
 
-        <section class="table-section" id="mort-daily-section" style="display:none">
-          <div class="section-header">
-            <h2>Mortality by House (Daily)</h2>
+        <div class="panel" id="m-table-panel" style="display:none">
+          <div class="panel-hdr">
+            <h2>Daily Mortalities by House</h2>
           </div>
-          <div class="table-wrap">
-            <table id="mort-daily-table">
+          <div class="tbl-wrap">
+            <table>
               <thead>
                 <tr>
                   <th>House</th>
-                  <th>Daily Deaths</th>
-                  <th>vs 3C Avg</th>
-                  <th>% Difference</th>
+                  <th>Daily Morts</th>
+                  <th>3C Avg</th>
+                  <th>% vs Avg</th>
+                  <th>Status</th>
                 </tr>
               </thead>
-              <tbody id="mort-daily-body"></tbody>
+              <tbody id="m-tbody"></tbody>
             </table>
           </div>
-        </section>
+        </div>
       </div>
 
-      <!-- ── WEEKLY MORTALITY REPORT ── -->
-      <div id="mortality-weekly" class="report-view" style="display:none">
-        <section class="query-bar">
-          <div class="query-controls">
-            <button class="run-btn" id="run-weekly-query">Generate Weekly Report</button>
-          </div>
-        </section>
-
-        <section class="table-section" id="mort-weekly-section" style="display:none">
-          <div class="section-header">
-            <h2>Mortality by House & Week</h2>
-          </div>
-          <div class="table-wrap">
-            <table id="mort-weekly-table">
-              <thead>
-                <tr>
-                  <th>House</th>
-                  <th>Week 1</th>
-                  <th>Week 2</th>
-                  <th>Week 3</th>
-                  <th>Week 4</th>
-                  <th>Week 5</th>
-                  <th>Week 6</th>
-                  <th>Total</th>
-                </tr>
-              </thead>
-              <tbody id="mort-weekly-body"></tbody>
+      <!-- WEEKLY VIEW -->
+      <div id="sub-weekly" class="sub-pane">
+        <div class="qbar">
+          <button class="run-btn" id="m-weekly-run">Generate Weekly Report</button>
+        </div>
+        <div class="panel" id="m-weekly-panel" style="display:none">
+          <div class="panel-hdr"><h2 id="m-weekly-title">Weekly Mortalities</h2></div>
+          <div class="tbl-wrap">
+            <table id="m-weekly-table">
+              <thead id="m-weekly-thead"></thead>
+              <tbody id="m-weekly-tbody"></tbody>
             </table>
           </div>
-        </section>
+        </div>
       </div>
 
-    </div> <!-- END mortality-sheet -->
+      <!-- CUMULATIVE VIEW -->
+      <div id="sub-cumulative" class="sub-pane">
+        <div class="qbar">
+          <button class="run-btn" id="m-cumul-run">Generate Cumulative Chart</button>
+        </div>
+        <div class="panel" id="m-cumul-panel" style="display:none">
+          <div class="panel-hdr">
+            <h2 id="m-cumul-title">Cumulative Mortality</h2>
+            <div id="m-cumul-totals" class="totals-row"></div>
+          </div>
+          <canvas id="m-cumul-chart" height="130"></canvas>
+        </div>
+      </div>
+
+    </section>
 
   </main>
+</div>
 
-  <!-- ── TOAST ── -->
-  <div id="toast" class="toast"></div>
+<!-- Toast -->
+<div id="toast" class="toast"></div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
-  <script src="js/app.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="/js/app.js"></script>
 </body>
 </html>

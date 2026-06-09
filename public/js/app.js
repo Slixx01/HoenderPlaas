@@ -1,483 +1,444 @@
-/* ── Poultry Dashboard – Frontend JS ── */
+/* ══ Poultry Ops Dashboard ══════════════════════════════════════════════ */
 
-let trendChart = null;
-let currentTab = "weight";
-let currentTrendData = null;
-let availableDays = [];
-let currentSheet = "weight";
+let weightChart  = null;
+let cumulChart   = null;
+let activeChartTab = "weight";
+let currentTrend   = null;
+let availableDays  = [];
+const CHART_COLORS = [
+  "#4f8ef7","#27c97a","#f5a623","#f0524a","#7c6fff",
+  "#4dd0e1","#ff7043","#ab47bc","#66bb6a","#ef5350"
+];
 
-// ── Sheet Tab Switching ────────────────────────────────────────────
+// ── Routing ───────────────────────────────────────────────────────────────
 
-document.querySelectorAll(".sheet-tab").forEach(btn => {
+document.querySelectorAll(".mnav-btn").forEach(btn => {
   btn.addEventListener("click", () => {
-    const sheet = btn.dataset.sheet;
-    switchSheet(sheet);
+    const tab = btn.dataset.tab;
+    document.querySelectorAll(".mnav-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    document.querySelectorAll(".tab-pane").forEach(p => p.classList.remove("active"));
+    document.getElementById(`tab-${tab}`).classList.add("active");
   });
 });
 
-function switchSheet(sheet) {
-  currentSheet = sheet;
-
-  // Update tab buttons
-  document.querySelectorAll(".sheet-tab").forEach(b => b.classList.remove("active"));
-  document.querySelector(`[data-sheet="${sheet}"]`).classList.add("active");
-
-  // Update sheet visibility
-  document.querySelectorAll(".sheet-content").forEach(s => s.classList.remove("active"));
-  document.getElementById(`${sheet}-sheet`).classList.add("active");
-
-  // Initialize sheet if needed
-  if (sheet === "mortality") {
-    populateMortalityDays(availableDays);
-  }
-}
-
-// ── Report Tab Switching (Mortality) ───────────────────────────────
-
-document.querySelectorAll(".report-tab").forEach(btn => {
+document.querySelectorAll(".subnav-btn").forEach(btn => {
   btn.addEventListener("click", () => {
-    const report = btn.dataset.report;
-    switchMortalityReport(report);
+    const sub = btn.dataset.sub;
+    document.querySelectorAll(".subnav-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    document.querySelectorAll(".sub-pane").forEach(p => p.classList.remove("active"));
+    document.getElementById(`sub-${sub}`).classList.add("active");
   });
 });
 
-function switchMortalityReport(report) {
-  // Update tab buttons
-  document.querySelectorAll(".report-tab").forEach(b => b.classList.remove("active"));
-  document.querySelector(`[data-report="${report}"]`).classList.add("active");
+// ── File upload ───────────────────────────────────────────────────────────
 
-  // Update report visibility
-  document.querySelectorAll(".report-view").forEach(v => v.classList.remove("active"));
-  document.getElementById(`mortality-${report}`).classList.add("active");
-}
-
-// ── File upload handling ───────────────────────────────────────────────────
-
-function setupUpload(inputId) {
-  document.getElementById(inputId).addEventListener("change", async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    await uploadFile(file);
+["file-input","file-reload"].forEach(id => {
+  document.getElementById(id).addEventListener("change", async e => {
+    const f = e.target.files[0];
+    if (f) await doUpload(f);
     e.target.value = "";
   });
-}
+});
 
-setupUpload("file-input");
-setupUpload("file-input-center");
-
-async function uploadFile(file) {
-  showToast("⏳ Loading workbook…");
-
-  const form = new FormData();
-  form.append("file", file);
-
+async function doUpload(file) {
+  toast("⏳ Loading workbook…");
+  const fd = new FormData();
+  fd.append("file", file);
   try {
-    const res = await fetch("/upload", { method: "POST", body: form });
-    const data = await res.json();
+    const r    = await fetch("/upload", { method:"POST", body:fd });
+    const data = await r.json();
+    if (data.error) { toast("❌ " + data.error, "error"); return; }
 
-    if (data.error) { showToast("❌ " + data.error, "error"); return; }
-
-    // Hide overlay, show main
-    document.getElementById("upload-overlay").style.display = "none";
-    document.getElementById("main-content").style.display = "block";
-
-    document.getElementById("loaded-file").textContent =
-      `📂 ${data.filename}  ·  ${data.flocks.length} flocks  ·  ${data.weight_records} weight records  ·  ${data.morts_records} mort records`;
+    document.getElementById("upload-screen").style.display = "none";
+    document.getElementById("app").style.display = "flex";
+    document.getElementById("hdr-meta").textContent =
+      `${data.filename} · ${data.flocks.length} flocks · ${data.weight_records} weight · ${data.morts_records} mort records`;
+    document.getElementById("hdr-flock").textContent =
+      `Flock ${data.flocks[data.flocks.length - 1].flock}`;
 
     availableDays = data.available_days;
-    populateDaySelect(availableDays);
-    renderFlockCards(data.flocks);
+    populateSelect("w-day-select", availableDays);
+    populateSelect("m-day-select", availableDays);
+    renderFlocks(data.flocks);
 
-    showToast(`✅ Loaded ${data.filename}`, "success");
-  } catch (err) {
-    showToast("❌ Upload failed: " + err.message, "error");
+    document.getElementById("w-flocks-panel").style.display = "block";
+    toast(`✅ Loaded ${data.filename}`, "success");
+    runWeightReport();
+  } catch(e) {
+    toast("❌ Upload failed: " + e.message, "error");
   }
 }
 
-function populateDaySelect(days) {
-  const sel = document.getElementById("day-select");
-  sel.innerHTML = '<option value="">-- choose day --</option>';
+function populateSelect(id, days) {
+  const sel = document.getElementById(id);
+  sel.innerHTML = '<option value="">Select…</option>';
   days.forEach(d => {
-    const opt = document.createElement("option");
-    opt.value = d;
-    opt.textContent = `Day ${d}`;
-    sel.appendChild(opt);
+    const o = document.createElement("option");
+    o.value = d; o.textContent = `Day ${d}`;
+    sel.appendChild(o);
   });
-  // Default to last available day
   if (days.length) sel.value = days[days.length - 1];
 }
 
-// ── Query execution ───────────────────────────────────────────────────────
+// ── Weight report ─────────────────────────────────────────────────────────
 
-document.getElementById("run-query").addEventListener("click", runQuery);
-document.getElementById("day-select").addEventListener("change", runQuery);
+document.getElementById("w-run").addEventListener("click", runWeightReport);
+document.getElementById("w-day-select").addEventListener("change", runWeightReport);
 
-async function runQuery() {
-  const day = parseInt(document.getElementById("day-select").value);
-  const threshold = parseFloat(document.getElementById("threshold-input").value) || 5;
+async function runWeightReport() {
+  const day   = parseInt(document.getElementById("w-day-select").value);
+  const thr   = parseFloat(document.getElementById("w-threshold").value) || 5;
+  if (!day) { toast("Please select a day", "error"); return; }
 
-  if (!day) { showToast("Please select a day", "error"); return; }
-
-  const btn = document.getElementById("run-query");
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> Running…';
-
+  const btn = document.getElementById("w-run");
+  setLoading(btn, true);
   try {
-    const res = await fetch(`/api/query_day?day=${day}&threshold=${threshold}`);
-    const data = await res.json();
+    const r    = await fetch(`/api/weight_day?day=${day}&threshold=${thr}`);
+    const data = await r.json();
+    if (data.error) { toast("❌ " + data.error, "error"); return; }
 
-    if (data.error) { showToast("❌ " + data.error, "error"); return; }
+    // KPIs
+    qs("#w-k-flock").textContent = data.flock ?? "—";
+    qs("#w-k-day").textContent   = `Day ${data.day}`;
+    qs("#w-k-avg").textContent   = data.three_cycle_avg != null ? fmt(data.three_cycle_avg) : "—";
+    qs("#w-k-below").textContent = data.below_avg_count;
+    qs("#w-k-above").textContent = data.above_avg_count;
+    show("w-kpis");
 
-    renderSummaryCards(data);
-    renderResultsTable(data, threshold);
+    // Table
+    const tbody = qs("#w-tbody");
+    tbody.innerHTML = "";
+    const sorted = [...data.houses].sort((a,b) => {
+      const o = {below:0,ok:1,above:2};
+      return o[a.status] - o[b.status];
+    });
+    sorted.forEach(h => {
+      const diff = h.weight != null && h.avg_weight != null
+        ? (h.weight - h.avg_weight).toFixed(1) : "—";
+      const diffFmt = isNaN(parseFloat(diff)) ? "—"
+        : (parseFloat(diff) >= 0 ? `+${diff}` : diff);
 
-    document.getElementById("summary-cards").style.display = "grid";
-    document.getElementById("results-section").style.display = "block";
-  } catch (err) {
-    showToast("❌ Query failed: " + err.message, "error");
+      const pctFmt = h.pct_diff != null
+        ? (h.pct_diff >= 0 ? `+${h.pct_diff.toFixed(1)}%` : `${h.pct_diff.toFixed(1)}%`) : "—";
+      const pctCls = h.status === "below" ? "pct-red" : h.status === "above" ? "pct-green" : "pct-muted";
+      const pillCls = `pill pill-${h.status}`;
+      const pillTxt = h.status === "below" ? "⬇ Under" : h.status === "above" ? "⬆ Over" : "✓ On Track";
+
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td><span class="h-name">${h.house}</span></td>
+        <td>${h.weight != null ? fmt(h.weight) : "—"}</td>
+        <td>${h.avg_weight != null ? fmt(h.avg_weight) : "—"}</td>
+        <td>${diffFmt}</td>
+        <td><span class="pct ${pctCls}">${pctFmt}</span></td>
+        <td>${h.morts != null ? h.morts : "—"}</td>
+        <td><span class="${pillCls}">${pillTxt}</span></td>`;
+      tr.addEventListener("click", () => loadHouseTrend(h.house, tr));
+      tbody.appendChild(tr);
+    });
+    show("w-table-panel");
   } finally {
-    btn.disabled = false;
-    btn.innerHTML = "Run Report";
+    setLoading(btn, false, "Run Report");
   }
-}
-
-// ── Render summary cards ──────────────────────────────────────────────────
-
-function renderSummaryCards(data) {
-  document.getElementById("card-flock").textContent = data.flock ?? "—";
-  document.getElementById("card-day").textContent = `Day ${data.day}`;
-  document.getElementById("card-avg").textContent =
-    data.three_cycle_avg != null ? data.three_cycle_avg.toLocaleString() : "—";
-  document.getElementById("card-below").textContent = data.below_avg_count;
-  document.getElementById("card-above").textContent = data.above_avg_count;
-}
-
-// ── Render results table ──────────────────────────────────────────────────
-
-function renderResultsTable(data, threshold) {
-  const tbody = document.getElementById("results-body");
-  tbody.innerHTML = "";
-
-  const sorted = [...data.houses].sort((a, b) => {
-    // Sort: below first (worst), then ok, then above
-    const order = { below: 0, ok: 1, above: 2 };
-    return order[a.status] - order[b.status];
-  });
-
-  sorted.forEach(h => {
-    const tr = document.createElement("tr");
-    tr.dataset.house = h.house;
-
-    const diff = h.weight != null && h.avg_weight != null
-      ? (h.weight - h.avg_weight).toFixed(1)
-      : "—";
-    const diffNum = parseFloat(diff);
-    const diffStr = isNaN(diffNum) ? "—"
-      : (diffNum >= 0 ? `+${diffNum}` : `${diffNum}`);
-
-    const pctStr = h.pct_diff != null
-      ? (h.pct_diff >= 0 ? `+${h.pct_diff.toFixed(1)}%` : `${h.pct_diff.toFixed(1)}%`)
-      : "—";
-    const pctClass = h.status === "below" ? "pct-below"
-                   : h.status === "above" ? "pct-above" : "pct-ok";
-
-    const statusLabel = h.status === "below" ? "⬇ Under"
-                      : h.status === "above" ? "⬆ Over" : "✓ On Track";
-    const statusClass = `status-${h.status}`;
-
-    tr.innerHTML = `
-      <td><span class="house-name">${h.house}</span></td>
-      <td>${h.weight != null ? h.weight.toLocaleString() : "—"}</td>
-      <td>${h.avg_weight != null ? h.avg_weight.toLocaleString() : "—"}</td>
-      <td>${diffStr}</td>
-      <td><span class="pct-value ${pctClass}">${pctStr}</span></td>
-      <td>${h.morts != null ? h.morts : "—"}</td>
-      <td><span class="status-pill ${statusClass}">${statusLabel}</span></td>
-    `;
-
-    tr.addEventListener("click", () => loadHouseTrend(h.house, tr));
-    tbody.appendChild(tr);
-  });
 }
 
 // ── House trend chart ─────────────────────────────────────────────────────
 
 async function loadHouseTrend(house, rowEl) {
-  // Highlight row
-  document.querySelectorAll("#results-body tr").forEach(r => r.classList.remove("selected"));
+  document.querySelectorAll("#w-tbody tr").forEach(r => r.classList.remove("selected"));
   rowEl.classList.add("selected");
-
   try {
-    const res = await fetch(`/api/house_trend?house=${house}`);
-    currentTrendData = await res.json();
-
-    document.getElementById("chart-title").textContent =
-      `House ${house}  —  Flock ${currentTrendData.flock}  (click row to compare)`;
-
-    document.getElementById("chart-section").style.display = "block";
-    document.getElementById("chart-section").scrollIntoView({ behavior: "smooth", block: "nearest" });
-
-    renderChart(currentTab);
-  } catch (err) {
-    showToast("❌ Could not load trend: " + err.message, "error");
+    const r    = await fetch(`/api/house_trend?house=${house}`);
+    currentTrend = await r.json();
+    qs("#w-chart-title").textContent = `House ${house} — Flock ${currentTrend.flock}`;
+    show("w-chart-panel");
+    qs("#w-chart-panel").scrollIntoView({ behavior:"smooth", block:"nearest" });
+    renderWeightChart(activeChartTab);
+  } catch(e) {
+    toast("❌ " + e.message, "error");
   }
 }
 
-document.querySelectorAll(".tab-btn").forEach(btn => {
+document.querySelectorAll(".pill-btn").forEach(btn => {
   btn.addEventListener("click", () => {
-    document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".pill-btn").forEach(b => b.classList.remove("active"));
     btn.classList.add("active");
-    currentTab = btn.dataset.tab;
-    if (currentTrendData) renderChart(currentTab);
+    activeChartTab = btn.dataset.chart;
+    if (currentTrend) renderWeightChart(activeChartTab);
   });
 });
 
-document.getElementById("close-chart").addEventListener("click", () => {
-  document.getElementById("chart-section").style.display = "none";
-  document.querySelectorAll("#results-body tr").forEach(r => r.classList.remove("selected"));
-  currentTrendData = null;
-  if (trendChart) { trendChart.destroy(); trendChart = null; }
+document.getElementById("w-close-chart").addEventListener("click", () => {
+  document.getElementById("w-chart-panel").style.display = "none";
+  document.querySelectorAll("#w-tbody tr").forEach(r => r.classList.remove("selected"));
+  if (weightChart) { weightChart.destroy(); weightChart = null; }
+  currentTrend = null;
 });
 
-function renderChart(tab) {
-  const ctx = document.getElementById("trend-chart").getContext("2d");
-  if (trendChart) { trendChart.destroy(); trendChart = null; }
-
-  let datasets = [];
-  let yLabel = "";
+function renderWeightChart(tab) {
+  const ctx = qs("#w-chart").getContext("2d");
+  if (weightChart) { weightChart.destroy(); weightChart = null; }
+  let datasets = [], yLabel = "";
 
   if (tab === "weight") {
     yLabel = "Weight (g)";
     datasets = [
       {
-        label: `${currentTrendData.house} Weight`,
-        data: currentTrendData.weight.map(p => ({ x: p.day, y: p.value })),
-        borderColor: "#4f8ef7",
-        backgroundColor: "rgba(79,142,247,.1)",
-        borderWidth: 2.5,
-        pointRadius: 3,
-        tension: 0.3,
-        fill: true,
+        label: `${currentTrend.house} Weight`,
+        data: currentTrend.weight.map(p => ({x:p.day, y:p.value})),
+        borderColor:"#4f8ef7", backgroundColor:"rgba(79,142,247,.1)",
+        borderWidth:2.5, pointRadius:3, tension:.35, fill:true
       },
       {
         label: "3-Cycle Avg",
-        data: currentTrendData.avg.map(p => ({ x: p.day, y: p.value })),
-        borderColor: "#f39c12",
-        backgroundColor: "transparent",
-        borderWidth: 2,
-        borderDash: [6, 4],
-        pointRadius: 0,
-        tension: 0.3,
+        data: currentTrend.avg.map(p => ({x:p.day, y:p.value})),
+        borderColor:"#f5a623", backgroundColor:"transparent",
+        borderWidth:2, borderDash:[7,4], pointRadius:0, tension:.35
       }
     ];
   } else {
-    yLabel = "Daily Mortalities";
-    datasets = [
-      {
-        label: `${currentTrendData.house} Morts`,
-        data: currentTrendData.morts.map(p => ({ x: p.day, y: p.value })),
-        borderColor: "#e74c3c",
-        backgroundColor: "rgba(231,76,60,.15)",
-        borderWidth: 2.5,
-        pointRadius: 3,
-        tension: 0.3,
-        fill: true,
-      }
-    ];
+    yLabel = "Daily Morts";
+    datasets = [{
+      label: `${currentTrend.house} Morts`,
+      data: currentTrend.morts.map(p => ({x:p.day, y:p.value})),
+      borderColor:"#f0524a", backgroundColor:"rgba(240,82,74,.12)",
+      borderWidth:2.5, pointRadius:3, tension:.35, fill:true
+    }];
   }
 
-  trendChart = new Chart(ctx, {
-    type: "line",
-    data: { datasets },
-    options: {
-      responsive: true,
-      interaction: { mode: "index", intersect: false },
-      plugins: {
-        legend: { labels: { color: "#e8eaf0", font: { size: 12 } } },
-        tooltip: {
-          backgroundColor: "#1a1d27",
-          borderColor: "#2d3250",
-          borderWidth: 1,
-          titleColor: "#e8eaf0",
-          bodyColor: "#7a82a0",
-        }
-      },
-      scales: {
-        x: {
-          type: "linear",
-          title: { display: true, text: "Day", color: "#7a82a0" },
-          grid: { color: "rgba(45,50,80,.5)" },
-          ticks: { color: "#7a82a0" }
-        },
-        y: {
-          title: { display: true, text: yLabel, color: "#7a82a0" },
-          grid: { color: "rgba(45,50,80,.5)" },
-          ticks: { color: "#7a82a0" }
-        }
-      }
-    }
+  weightChart = new Chart(ctx, {
+    type:"line", data:{ datasets },
+    options: chartOpts(yLabel)
   });
 }
 
 // ── Flock cards ───────────────────────────────────────────────────────────
 
-function renderFlockCards(flocks) {
-  const container = document.getElementById("flock-cards");
-  container.innerHTML = "";
-  const maxFlock = Math.max(...flocks.map(f => f.flock));
-
+function renderFlocks(flocks) {
+  const grid = qs("#w-flock-grid");
+  grid.innerHTML = "";
+  const max = Math.max(...flocks.map(f => f.flock));
   flocks.forEach(f => {
-    const card = document.createElement("div");
-    card.className = "flock-card" + (f.flock === maxFlock ? " current" : "");
-    card.innerHTML = `
-      <div class="flock-num">Flock ${f.flock}</div>
-      <div class="flock-meta">Max day recorded: <strong>${f.max_day}</strong></div>
-      ${f.flock === maxFlock ? '<span class="current-badge">CURRENT</span>' : ''}
-    `;
-    card.addEventListener("click", () => {
-      // Select last day for this flock and run
-      fetch(`/api/available_days`).then(r => r.json()).then(d => {
-        availableDays = d.days;
-        populateDaySelect(availableDays);
-        runQuery();
-      });
+    const el = document.createElement("div");
+    el.className = "flock-card" + (f.flock === max ? " current" : "");
+    el.innerHTML = `
+      <div class="fc-num">Flock ${f.flock}</div>
+      <div class="fc-meta">Up to day <strong>${f.max_day}</strong></div>
+      ${f.flock === max ? '<span class="fc-badge">CURRENT</span>' : ""}`;
+    el.addEventListener("click", () => loadFlock(f.flock));
+    grid.appendChild(el);
+  });
+}
+
+async function loadFlock(flockId) {
+  try {
+    const r    = await fetch(`/api/available_days?flock=${flockId}`);
+    const data = await r.json();
+    availableDays = data.days;
+    populateSelect("w-day-select", availableDays);
+    populateSelect("m-day-select", availableDays);
+    // highlight selected flock card
+    document.querySelectorAll(".flock-card").forEach(c => c.classList.remove("selected-flock"));
+    document.querySelectorAll(".flock-card").forEach(c => {
+      if (c.querySelector(".fc-num").textContent === `Flock ${flockId}`) {
+        c.classList.add("selected-flock");
+      }
     });
-    container.appendChild(card);
-  });
-}
-
-// ── Mortality Reports ─────────────────────────────────────────────────────
-
-function populateMortalityDays(days) {
-  const sel = document.getElementById("mort-day-select");
-  sel.innerHTML = '<option value="">-- choose day --</option>';
-  days.forEach(d => {
-    const opt = document.createElement("option");
-    opt.value = d;
-    opt.textContent = `Day ${d}`;
-    sel.appendChild(opt);
-  });
-  if (days.length) sel.value = days[days.length - 1];
-}
-
-document.getElementById("run-mort-query").addEventListener("click", runMortalityQuery);
-document.getElementById("mort-day-select").addEventListener("change", runMortalityQuery);
-
-async function runMortalityQuery() {
-  const day = parseInt(document.getElementById("mort-day-select").value);
-  
-  if (!day) { showToast("Please select a day", "error"); return; }
-
-  const btn = document.getElementById("run-mort-query");
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> Running…';
-
-  try {
-    const res = await fetch(`/api/mortality_day?day=${day}`);
-    const data = await res.json();
-
-    if (data.error) { showToast("❌ " + data.error, "error"); return; }
-
-    renderMortalitySummary(data);
-    renderMortalityDailyTable(data);
-
-    document.getElementById("mort-summary-cards").style.display = "grid";
-    document.getElementById("mort-daily-section").style.display = "block";
-  } catch (err) {
-    showToast("❌ Query failed: " + err.message, "error");
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = "Run Report";
+    document.getElementById("hdr-flock").textContent = `Flock ${flockId}`;
+    await runWeightReport();
+  } catch(e) {
+    toast("Could not load flock: " + e.message, "error");
   }
 }
 
-function renderMortalitySummary(data) {
-  document.getElementById("mort-card-flock").textContent = data.flock ?? "—";
-  document.getElementById("mort-card-day").textContent = `Day ${data.day}`;
-  document.getElementById("mort-card-total").textContent = data.total_morts ?? "—";
-  document.getElementById("mort-card-avg").textContent = data.avg_morts ? data.avg_morts.toFixed(1) : "—";
-}
+// ── Mortality: daily ──────────────────────────────────────────────────────
 
-function renderMortalityDailyTable(data) {
-  const tbody = document.getElementById("mort-daily-body");
-  tbody.innerHTML = "";
+document.getElementById("m-run").addEventListener("click", runMortDaily);
+document.getElementById("m-day-select").addEventListener("change", runMortDaily);
 
-  const sorted = [...data.houses].sort((a, b) => a.house.localeCompare(b.house));
-
-  sorted.forEach(h => {
-    const tr = document.createElement("tr");
-    const pctStr = h.pct_diff != null
-      ? (h.pct_diff >= 0 ? `+${h.pct_diff.toFixed(1)}%` : `${h.pct_diff.toFixed(1)}%`)
-      : "—";
-    const pctClass = h.pct_diff && h.pct_diff > 5 ? "pct-above" : "pct-ok";
-
-    tr.innerHTML = `
-      <td><strong>${h.house}</strong></td>
-      <td>${h.morts != null ? h.morts : "—"}</td>
-      <td>${h.avg_morts != null ? h.avg_morts.toFixed(1) : "—"}</td>
-      <td><span class="${pctClass}">${pctStr}</span></td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
-
-document.getElementById("run-weekly-query").addEventListener("click", runWeeklyQuery);
-
-async function runWeeklyQuery() {
-  const btn = document.getElementById("run-weekly-query");
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> Generating…';
-
+async function runMortDaily() {
+  const day = parseInt(document.getElementById("m-day-select").value);
+  if (!day) { toast("Please select a day", "error"); return; }
+  const btn = qs("#m-run");
+  setLoading(btn, true);
   try {
-    const res = await fetch(`/api/mortality_weekly`);
-    const data = await res.json();
+    const r    = await fetch(`/api/mortality_day?day=${day}`);
+    const data = await r.json();
+    if (data.error) { toast("❌ " + data.error, "error"); return; }
 
-    if (data.error) { showToast("❌ " + data.error, "error"); return; }
+    qs("#m-k-flock").textContent  = data.flock ?? "—";
+    qs("#m-k-day").textContent    = `Day ${data.day}`;
+    qs("#m-k-total").textContent  = data.total_morts ?? "—";
+    qs("#m-k-avg").textContent    = data.avg_morts != null ? data.avg_morts.toFixed(1) : "—";
+    qs("#m-k-houses").textContent = data.house_count ?? "—";
+    show("m-kpis");
 
-    renderMortalityWeeklyTable(data);
+    const tbody = qs("#m-tbody");
+    tbody.innerHTML = "";
+    data.houses.forEach(h => {
+      const pctFmt = h.pct_diff != null
+        ? (h.pct_diff >= 0 ? `+${h.pct_diff.toFixed(1)}%` : `${h.pct_diff.toFixed(1)}%`) : "—";
+      const pctCls = h.pct_diff && h.pct_diff > 20 ? "pct-red" : "pct-muted";
+      const pillCls = h.status === "high" ? "pill pill-high" : "pill pill-ok";
+      const pillTxt = h.status === "high" ? "⚠ High" : "✓ Normal";
 
-    document.getElementById("mort-weekly-section").style.display = "block";
-  } catch (err) {
-    showToast("❌ Query failed: " + err.message, "error");
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td><span class="h-name">${h.house}</span></td>
+        <td>${h.morts}</td>
+        <td>${h.avg_morts != null ? h.avg_morts : "—"}</td>
+        <td><span class="pct ${pctCls}">${pctFmt}</span></td>
+        <td><span class="${pillCls}">${pillTxt}</span></td>`;
+      tbody.appendChild(tr);
+    });
+    show("m-table-panel");
   } finally {
-    btn.disabled = false;
-    btn.innerHTML = "Generate Weekly Report";
+    setLoading(btn, false, "Run Report");
   }
 }
 
-function renderMortalityWeeklyTable(data) {
-  const tbody = document.getElementById("mort-weekly-body");
-  tbody.innerHTML = "";
+// ── Mortality: weekly ─────────────────────────────────────────────────────
 
-  data.houses.forEach(house => {
-    const tr = document.createElement("tr");
-    const weeks = house.weeks;
-    const total = weeks.reduce((sum, w) => sum + w, 0);
+document.getElementById("m-weekly-run").addEventListener("click", runMortWeekly);
 
-    const weekCells = weeks.map(w => `<td>${w}</td>`).join("");
-    tr.innerHTML = `
-      <td><strong>${house.name}</strong></td>
-      ${weekCells}
-      <td><strong>${total}</strong></td>
-    `;
-    tbody.appendChild(tr);
-  });
+async function runMortWeekly() {
+  const btn = qs("#m-weekly-run");
+  setLoading(btn, true, "Generating…");
+  try {
+    const r    = await fetch("/api/mortality_weekly");
+    const data = await r.json();
+    if (data.error) { toast("❌ " + data.error, "error"); return; }
+
+    qs("#m-weekly-title").textContent = `Weekly Mortalities — Flock ${data.flock} (Day 0–${data.max_day})`;
+
+    // Build header
+    const thead = qs("#m-weekly-thead");
+    thead.innerHTML = `<tr>
+      <th>House</th>
+      ${data.week_labels.map(w => `<th>${w}</th>`).join("")}
+      <th>Total</th>
+    </tr>`;
+
+    // Build body
+    const tbody = qs("#m-weekly-tbody");
+    tbody.innerHTML = "";
+    data.houses.forEach(h => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td><span class="h-name">${h.name}</span></td>
+        ${h.weeks.map(w => `<td>${w}</td>`).join("")}
+        <td><strong>${h.total}</strong></td>`;
+      tbody.appendChild(tr);
+    });
+    show("m-weekly-panel");
+  } finally {
+    setLoading(btn, false, "Generate Weekly Report");
+  }
 }
 
-// ── Toast ─────────────────────────────────────────────────────────────────
+// ── Mortality: cumulative ─────────────────────────────────────────────────
 
-function showToast(msg, type = "") {
-  const el = document.getElementById("toast");
+document.getElementById("m-cumul-run").addEventListener("click", runMortCumulative);
+
+async function runMortCumulative() {
+  const btn = qs("#m-cumul-run");
+  setLoading(btn, true, "Generating…");
+  try {
+    const r    = await fetch("/api/mortality_cumulative");
+    const data = await r.json();
+    if (data.error) { toast("❌ " + data.error, "error"); return; }
+
+    qs("#m-cumul-title").textContent = `Cumulative Mortality — Flock ${data.flock}`;
+
+    // Totals chips
+    const totalsEl = qs("#m-cumul-totals");
+    totalsEl.innerHTML = data.houses
+      .map(h => `<span class="total-chip"><strong>${h.house}</strong> ${h.total.toLocaleString()}</span>`)
+      .join("");
+
+    // Chart
+    const ctx = qs("#m-cumul-chart").getContext("2d");
+    if (cumulChart) { cumulChart.destroy(); cumulChart = null; }
+
+    cumulChart = new Chart(ctx, {
+      type: "line",
+      data: {
+        datasets: data.houses.map((h, i) => ({
+          label: h.house,
+          data: h.points.map(p => ({x:p.day, y:p.value})),
+          borderColor: CHART_COLORS[i % CHART_COLORS.length],
+          backgroundColor: "transparent",
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: .3
+        }))
+      },
+      options: chartOpts("Cumulative Morts")
+    });
+    show("m-cumul-panel");
+  } finally {
+    setLoading(btn, false, "Generate Cumulative Chart");
+  }
+}
+
+// ── Shared chart options ──────────────────────────────────────────────────
+
+function chartOpts(yLabel) {
+  return {
+    responsive: true,
+    interaction: { mode:"index", intersect:false },
+    plugins: {
+      legend: { labels: { color:"#dde1ef", font:{ size:11 }, boxWidth:12 } },
+      tooltip: {
+        backgroundColor:"#13161f", borderColor:"#2a2f47", borderWidth:1,
+        titleColor:"#dde1ef", bodyColor:"#6b7494"
+      }
+    },
+    scales: {
+      x: {
+        type:"linear",
+        title:{ display:true, text:"Day", color:"#6b7494" },
+        grid:{ color:"rgba(42,47,71,.6)" },
+        ticks:{ color:"#6b7494" }
+      },
+      y: {
+        title:{ display:true, text:yLabel, color:"#6b7494" },
+        grid:{ color:"rgba(42,47,71,.6)" },
+        ticks:{ color:"#6b7494" }
+      }
+    }
+  };
+}
+
+// ── Utilities ─────────────────────────────────────────────────────────────
+
+function qs(sel) { return document.querySelector(sel); }
+function show(id) { document.getElementById(id).style.display = ""; }
+function fmt(n) { return Number(n).toLocaleString(); }
+
+function setLoading(btn, on, offLabel="Run Report") {
+  btn.disabled = on;
+  btn.innerHTML = on ? '<span class="spin"></span> Loading…' : offLabel;
+}
+
+function toast(msg, type="") {
+  const el = qs("#toast");
   el.textContent = msg;
   el.className = "toast show " + type;
-  clearTimeout(el._timer);
-  el._timer = setTimeout(() => { el.className = "toast"; }, 3500);
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.className = "toast"; }, 3500);
 }
 
-// ── Row selected style ────────────────────────────────────────────────────
-
-const rowStyle = document.createElement("style");
-rowStyle.textContent = `
-  #results-body tr.selected { background: rgba(79,142,247,.12) !important; }
-`;
-document.head.appendChild(rowStyle);
+// Drag-over highlight on upload drop zone
+const dz = qs("#drop-zone");
+if (dz) {
+  dz.addEventListener("dragover", e => { e.preventDefault(); dz.style.borderColor = "var(--accent)"; });
+  dz.addEventListener("dragleave", () => { dz.style.borderColor = ""; });
+  dz.addEventListener("drop", async e => {
+    e.preventDefault(); dz.style.borderColor = "";
+    const f = e.dataTransfer.files[0];
+    if (f) await doUpload(f);
+  });
+}
