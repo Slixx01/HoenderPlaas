@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Poultry Operations Dashboard</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+
+  <!-- ── HEADER ── -->
+  <header class="header">
+    <div class="header-left">
+      <span class="logo">🐔</span>
+      <div>
+        <h1>Poultry Operations Dashboard</h1>
+        <p class="subtitle" id="loaded-file">No data loaded — upload your workbook to begin</p>
+      </div>
+    </div>
+    <div class="header-right">
+      <label class="upload-btn" for="file-input">
+        📂 Load Workbook
+        <input type="file" id="file-input" accept=".xlsx,.xls" style="display:none"/>
+      </label>
+    </div>
+  </header>
+
+  <!-- ── UPLOAD OVERLAY ── -->
+  <div id="upload-overlay" class="upload-overlay">
+    <div class="upload-card">
+      <div class="upload-icon">📊</div>
+      <h2>Upload Your Workbook</h2>
+      <p>Drop your Excel file here or click Browse to get started.</p>
+      <label class="upload-btn large" for="file-input-center">
+        Browse File
+        <input type="file" id="file-input-center" accept=".xlsx,.xls" style="display:none"/>
+      </label>
+      <p class="upload-hint">Expects sheets: <em>Dayly Weight</em> and <em>Daily Morts</em></p>
+    </div>
+  </div>
+
+  <!-- ── MAIN CONTENT ── -->
+  <main class="main" id="main-content" style="display:none">
+
+    <!-- ── QUERY BAR ── -->
+    <section class="query-bar">
+      <div class="query-controls">
+        <div class="control-group">
+          <label for="day-select">Select Day</label>
+          <select id="day-select">
+            <option value="">-- choose day --</option>
+          </select>
+        </div>
+        <div class="control-group">
+          <label for="threshold-input">Alert Threshold (%)</label>
+          <input type="number" id="threshold-input" value="5" min="0" max="100" step="0.5"/>
+        </div>
+        <button class="run-btn" id="run-query">Run Report</button>
+      </div>
+    </section>
+
+    <!-- ── SUMMARY CARDS ── -->
+    <section class="cards" id="summary-cards" style="display:none">
+      <div class="card">
+        <div class="card-label">Current Flock</div>
+        <div class="card-value" id="card-flock">—</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Day</div>
+        <div class="card-value" id="card-day">—</div>
+      </div>
+      <div class="card">
+        <div class="card-label">3-Cycle Avg Weight</div>
+        <div class="card-value" id="card-avg">—</div>
+        <div class="card-sub">grams</div>
+      </div>
+      <div class="card card-warn">
+        <div class="card-label">Houses Below Avg</div>
+        <div class="card-value" id="card-below">—</div>
+      </div>
+      <div class="card card-good">
+        <div class="card-label">Houses Above Avg</div>
+        <div class="card-value" id="card-above">—</div>
+      </div>
+    </section>
+
+    <!-- ── RESULTS TABLE ── -->
+    <section class="table-section" id="results-section" style="display:none">
+      <div class="section-header">
+        <h2>House Performance Report</h2>
+        <div class="legend">
+          <span class="badge badge-below">Below threshold</span>
+          <span class="badge badge-above">Above threshold</span>
+          <span class="badge badge-ok">Within range</span>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table id="results-table">
+          <thead>
+            <tr>
+              <th>House</th>
+              <th>Weight (g)</th>
+              <th>3C Avg (g)</th>
+              <th>Difference (g)</th>
+              <th>% vs Avg</th>
+              <th>Daily Morts</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="results-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ── TREND CHART ── -->
+    <section class="chart-section" id="chart-section" style="display:none">
+      <div class="section-header">
+        <h2 id="chart-title">House Trend</h2>
+        <button class="close-chart" id="close-chart">✕ Close</button>
+      </div>
+      <div class="chart-tabs" id="chart-tabs">
+        <button class="tab-btn active" data-tab="weight">Weight</button>
+        <button class="tab-btn" data-tab="morts">Mortalities</button>
+      </div>
+      <canvas id="trend-chart" height="120"></canvas>
+    </section>
+
+    <!-- ── FLOCK OVERVIEW ── -->
+    <section class="flock-section">
+      <h2>Flock Overview</h2>
+      <div id="flock-cards" class="flock-grid"></div>
+    </section>
+
+  </main>
+
+  <!-- ── TOAST ── -->
+  <div id="toast" class="toast"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
