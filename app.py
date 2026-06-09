@@ -1,10 +1,12 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 import pandas as pd
 import numpy as np
 import os
 import tempfile
 
-app = Flask(__name__)
+# Configure Flask to serve from public folder
+app = Flask(__name__, static_folder='public', static_url_path='/')
+app.config['STATIC_FOLDER'] = os.path.join(os.path.dirname(__file__), 'public')
 
 # Global data store
 data_store = {
@@ -269,7 +271,7 @@ def get_available_days(flock=None):
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return send_from_directory(app.static_folder, 'index.html')
 
 
 @app.route("/upload", methods=["POST"])
