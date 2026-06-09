@@ -389,6 +389,115 @@ def api_all_days_report():
     return jsonify({"report": report})
 
 
+@app.route("/api/mortality_day", methods=["GET"])
+def api_mortality_day():
+    """Get mortality data for a specific day."""
+    day = request.args.get("day", type=int)
+    
+    if day is None:
+        return jsonify({"error": "Day parameter required"}), 400
+    
+    morts_df = data_store["daily_morts"]
+    if morts_df is None:
+        return jsonify({"error": "No mortality data loaded"}), 400
+    
+    # Get all flocks
+    all_flocks = sorted(morts_df[morts_df["house"] != "3C_AVG"]["flock"].unique())
+    if not len(all_flocks):
+        return jsonify({"error": "No flocks found"}), 400
+    
+    current_flock = max(all_flocks)
+    
+    # Get 3C average for this day
+    avg_data = morts_df[(morts_df["house"] == "3C_AVG") & (morts_df["day"] == day)]
+    avg_value = float(avg_data.iloc[0]["value"]) if not avg_data.empty else None
+    
+    # Get current flock data for this day
+    current_data = morts_df[
+        (morts_df["flock"] == current_flock) &
+        (morts_df["day"] == day) &
+        (morts_df["house"] != "3C_AVG")
+    ]
+    
+    houses = []
+    total_morts = 0
+    
+    for _, row in current_data.iterrows():
+        house = row["house"]
+        morts = row["value"]
+        total_morts += morts
+        
+        pct_diff = None
+        if avg_value and avg_value != 0:
+            pct_diff = ((morts - avg_value) / avg_value) * 100
+        
+        houses.append({
+            "house": house,
+            "morts": round(morts, 0),
+            "avg_morts": round(avg_value, 1) if avg_value else None,
+            "pct_diff": round(pct_diff, 2) if pct_diff else None
+        })
+    
+    avg_morts = total_morts / len(houses) if houses else 0
+    
+    return jsonify({
+        "flock": int(current_flock),
+        "day": day,
+        "houses": houses,
+        "total_morts": int(total_morts),
+        "avg_morts": avg_morts
+    })
+
+
+@app.route("/api/mortality_weekly", methods=["GET"])
+def api_mortality_weekly():
+    """Get mortality aggregated by week per house."""
+    morts_df = data_store["daily_morts"]
+    if morts_df is None:
+        return jsonify({"error": "No mortality data loaded"}), 400
+    
+    # Get current flock
+    all_flocks = sorted(morts_df[morts_df["house"] != "3C_AVG"]["flock"].unique())
+    if not len(all_flocks):
+        return jsonify({"error": "No flocks found"}), 400
+    
+    current_flock = max(all_flocks)
+    
+    # Get all houses for this flock
+    flock_data = morts_df[
+        (morts_df["flock"] == current_flock) &
+        (morts_df["house"] != "3C_AVG")
+    ]
+    
+    houses_list = sorted(flock_data["house"].unique())
+    max_day = int(flock_data["day"].max()) if not flock_data.empty else 0
+    
+    # Group by week (days 1-7, 8-14, 15-21, 22-28, 29-35, 36-42)
+    houses = []
+    
+    for house in houses_list:
+        house_data = flock_data[flock_data["house"] == house]
+        weeks = [0, 0, 0, 0, 0, 0]  # 6 weeks max
+        
+        for _, row in house_data.iterrows():
+            day = int(row["day"])
+            value = row["value"]
+            week_idx = (day - 1) // 7
+            if week_idx < 6:
+                weeks[week_idx] += value
+        
+        houses.append({
+            "name": house,
+            "weeks": weeks
+        })
+    
+    return jsonify({
+        "flock": int(current_flock),
+        "max_day": max_day,
+        "houses": houses
+    })
+
+
 if __name__ == "__main__":
     # Use PORT env var for hosting platforms; default to 5000 for local dev
     port = int(os.environ.get("PORT", 5000))

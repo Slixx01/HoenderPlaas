@@ -42,6 +42,17 @@
   <!-- ── MAIN CONTENT ── -->
   <main class="main" id="main-content" style="display:none">
 
+    <!-- ── SHEET TABS ── -->
+    <div class="sheet-tabs">
+      <button class="sheet-tab active" data-sheet="weight">📊 Weight Report</button>
+      <button class="sheet-tab" data-sheet="mortality">💀 Mortality Report</button>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════ -->
+    <!-- WEIGHT SHEET -->
+    <!-- ══════════════════════════════════════════════════════════════ -->
+    <div id="weight-sheet" class="sheet-content active">
+
     <!-- ── QUERY BAR ── -->
     <section class="query-bar">
       <div class="query-controls">
@@ -130,6 +141,106 @@
       <h2>Flock Overview</h2>
       <div id="flock-cards" class="flock-grid"></div>
     </section>
+
+    </div> <!-- END weight-sheet -->
+
+    <!-- ══════════════════════════════════════════════════════════════ -->
+    <!-- MORTALITY SHEET -->
+    <!-- ══════════════════════════════════════════════════════════════ -->
+    <div id="mortality-sheet" class="sheet-content" style="display:none">
+
+      <!-- ── REPORT TYPE TABS ── -->
+      <div class="report-tabs">
+        <button class="report-tab active" data-report="daily">📅 Daily Report</button>
+        <button class="report-tab" data-report="weekly">📊 Weekly Report</button>
+      </div>
+
+      <!-- ── DAILY MORTALITY REPORT ── -->
+      <div id="mortality-daily" class="report-view active">
+        <section class="query-bar">
+          <div class="query-controls">
+            <div class="control-group">
+              <label for="mort-day-select">Select Day</label>
+              <select id="mort-day-select">
+                <option value="">-- choose day --</option>
+              </select>
+            </div>
+            <button class="run-btn" id="run-mort-query">Run Report</button>
+          </div>
+        </section>
+
+        <section class="cards" id="mort-summary-cards" style="display:none">
+          <div class="card">
+            <div class="card-label">Current Flock</div>
+            <div class="card-value" id="mort-card-flock">—</div>
+          </div>
+          <div class="card">
+            <div class="card-label">Day</div>
+            <div class="card-value" id="mort-card-day">—</div>
+          </div>
+          <div class="card card-warn">
+            <div class="card-label">Total Mortalities</div>
+            <div class="card-value" id="mort-card-total">—</div>
+          </div>
+          <div class="card">
+            <div class="card-label">Avg per House</div>
+            <div class="card-value" id="mort-card-avg">—</div>
+          </div>
+        </section>
+
+        <section class="table-section" id="mort-daily-section" style="display:none">
+          <div class="section-header">
+            <h2>Mortality by House (Daily)</h2>
+          </div>
+          <div class="table-wrap">
+            <table id="mort-daily-table">
+              <thead>
+                <tr>
+                  <th>House</th>
+                  <th>Daily Deaths</th>
+                  <th>vs 3C Avg</th>
+                  <th>% Difference</th>
+                </tr>
+              </thead>
+              <tbody id="mort-daily-body"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <!-- ── WEEKLY MORTALITY REPORT ── -->
+      <div id="mortality-weekly" class="report-view" style="display:none">
+        <section class="query-bar">
+          <div class="query-controls">
+            <button class="run-btn" id="run-weekly-query">Generate Weekly Report</button>
+          </div>
+        </section>
+
+        <section class="table-section" id="mort-weekly-section" style="display:none">
+          <div class="section-header">
+            <h2>Mortality by House & Week</h2>
+          </div>
+          <div class="table-wrap">
+            <table id="mort-weekly-table">
+              <thead>
+                <tr>
+                  <th>House</th>
+                  <th>Week 1</th>
+                  <th>Week 2</th>
+                  <th>Week 3</th>
+                  <th>Week 4</th>
+                  <th>Week 5</th>
+                  <th>Week 6</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody id="mort-weekly-body"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+    </div> <!-- END mortality-sheet -->
 
   </main>
 

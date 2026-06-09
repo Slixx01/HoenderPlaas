@@ -4,6 +4,52 @@ let trendChart = null;
 let currentTab = "weight";
 let currentTrendData = null;
 let availableDays = [];
+let currentSheet = "weight";
+
+// ── Sheet Tab Switching ────────────────────────────────────────────
+
+document.querySelectorAll(".sheet-tab").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const sheet = btn.dataset.sheet;
+    switchSheet(sheet);
+  });
+});
+
+function switchSheet(sheet) {
+  currentSheet = sheet;
+
+  // Update tab buttons
+  document.querySelectorAll(".sheet-tab").forEach(b => b.classList.remove("active"));
+  document.querySelector(`[data-sheet="${sheet}"]`).classList.add("active");
+
+  // Update sheet visibility
+  document.querySelectorAll(".sheet-content").forEach(s => s.classList.remove("active"));
+  document.getElementById(`${sheet}-sheet`).classList.add("active");
+
+  // Initialize sheet if needed
+  if (sheet === "mortality") {
+    populateMortalityDays(availableDays);
+  }
+}
+
+// ── Report Tab Switching (Mortality) ───────────────────────────────
+
+document.querySelectorAll(".report-tab").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const report = btn.dataset.report;
+    switchMortalityReport(report);
+  });
+});
+
+function switchMortalityReport(report) {
+  // Update tab buttons
+  document.querySelectorAll(".report-tab").forEach(b => b.classList.remove("active"));
+  document.querySelector(`[data-report="${report}"]`).classList.add("active");
+
+  // Update report visibility
+  document.querySelectorAll(".report-view").forEach(v => v.classList.remove("active"));
+  document.getElementById(`mortality-${report}`).classList.add("active");
+}
 
 // ── File upload handling ───────────────────────────────────────────────────
 
@@ -297,6 +343,124 @@ function renderFlockCards(flocks) {
       });
     });
     container.appendChild(card);
+  });
+}
+
+// ── Mortality Reports ─────────────────────────────────────────────────────
+
+function populateMortalityDays(days) {
+  const sel = document.getElementById("mort-day-select");
+  sel.innerHTML = '<option value="">-- choose day --</option>';
+  days.forEach(d => {
+    const opt = document.createElement("option");
+    opt.value = d;
+    opt.textContent = `Day ${d}`;
+    sel.appendChild(opt);
+  });
+  if (days.length) sel.value = days[days.length - 1];
+}
+
+document.getElementById("run-mort-query").addEventListener("click", runMortalityQuery);
+document.getElementById("mort-day-select").addEventListener("change", runMortalityQuery);
+
+async function runMortalityQuery() {
+  const day = parseInt(document.getElementById("mort-day-select").value);
+  
+  if (!day) { showToast("Please select a day", "error"); return; }
+
+  const btn = document.getElementById("run-mort-query");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Running…';
+
+  try {
+    const res = await fetch(`/api/mortality_day?day=${day}`);
+    const data = await res.json();
+
+    if (data.error) { showToast("❌ " + data.error, "error"); return; }
+
+    renderMortalitySummary(data);
+    renderMortalityDailyTable(data);
+
+    document.getElementById("mort-summary-cards").style.display = "grid";
+    document.getElementById("mort-daily-section").style.display = "block";
+  } catch (err) {
+    showToast("❌ Query failed: " + err.message, "error");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = "Run Report";
+  }
+}
+
+function renderMortalitySummary(data) {
+  document.getElementById("mort-card-flock").textContent = data.flock ?? "—";
+  document.getElementById("mort-card-day").textContent = `Day ${data.day}`;
+  document.getElementById("mort-card-total").textContent = data.total_morts ?? "—";
+  document.getElementById("mort-card-avg").textContent = data.avg_morts ? data.avg_morts.toFixed(1) : "—";
+}
+
+function renderMortalityDailyTable(data) {
+  const tbody = document.getElementById("mort-daily-body");
+  tbody.innerHTML = "";
+
+  const sorted = [...data.houses].sort((a, b) => a.house.localeCompare(b.house));
+
+  sorted.forEach(h => {
+    const tr = document.createElement("tr");
+    const pctStr = h.pct_diff != null
+      ? (h.pct_diff >= 0 ? `+${h.pct_diff.toFixed(1)}%` : `${h.pct_diff.toFixed(1)}%`)
+      : "—";
+    const pctClass = h.pct_diff && h.pct_diff > 5 ? "pct-above" : "pct-ok";
+
+    tr.innerHTML = `
+      <td><strong>${h.house}</strong></td>
+      <td>${h.morts != null ? h.morts : "—"}</td>
+      <td>${h.avg_morts != null ? h.avg_morts.toFixed(1) : "—"}</td>
+      <td><span class="${pctClass}">${pctStr}</span></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+document.getElementById("run-weekly-query").addEventListener("click", runWeeklyQuery);
+
+async function runWeeklyQuery() {
+  const btn = document.getElementById("run-weekly-query");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Generating…';
+
+  try {
+    const res = await fetch(`/api/mortality_weekly`);
+    const data = await res.json();
+
+    if (data.error) { showToast("❌ " + data.error, "error"); return; }
+
+    renderMortalityWeeklyTable(data);
+
+    document.getElementById("mort-weekly-section").style.display = "block";
+  } catch (err) {
+    showToast("❌ Query failed: " + err.message, "error");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = "Generate Weekly Report";
+  }
+}
+
+function renderMortalityWeeklyTable(data) {
+  const tbody = document.getElementById("mort-weekly-body");
+  tbody.innerHTML = "";
+
+  data.houses.forEach(house => {
+    const tr = document.createElement("tr");
+    const weeks = house.weeks;
+    const total = weeks.reduce((sum, w) => sum + w, 0);
+
+    const weekCells = weeks.map(w => `<td>${w}</td>`).join("");
+    tr.innerHTML = `
+      <td><strong>${house.name}</strong></td>
+      ${weekCells}
+      <td><strong>${total}</strong></td>
+    `;
+    tbody.appendChild(tr);
   });
 }
 
