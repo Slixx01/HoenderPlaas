@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 import os
 import tempfile
+from io import BytesIO
+import traceback
 
 # Configure Flask to serve from public folder
 app = Flask(__name__, static_folder='public', static_url_path='/')
@@ -15,85 +17,94 @@ data_store = {
     "filename": None
 }
 
-def parse_excel(filepath):
+def parse_excel(file_stream):
     """Parse the Excel workbook and extract structured data from sheets 3 & 4."""
-    xl = pd.ExcelFile(filepath)
-    sheets = xl.sheet_names
+    try:
+        xl = pd.ExcelFile(file_stream, engine='openpyxl')
+        sheets = xl.sheet_names
+        
+        if len(sheets) < 4:
+            raise ValueError(f"Expected at least 4 sheets, found {len(sheets)}. Sheets: {sheets}")
 
-    # Expect sheet index 2 = Dayly Weight, index 3 = Daily Morts
-    weight_sheet = sheets[2]
-    morts_sheet = sheets[3]
+        # Expect sheet index 2 = Dayly Weight, index 3 = Daily Morts
+        weight_sheet = sheets[2]
+        morts_sheet = sheets[3]
 
-    weight_data = parse_daily_sheet(filepath, weight_sheet, "weight")
-    morts_data = parse_daily_sheet(filepath, morts_sheet, "morts")
+        weight_data = parse_daily_sheet(file_stream, weight_sheet, "weight")
+        morts_data = parse_daily_sheet(file_stream, morts_sheet, "morts")
 
-    return weight_data, morts_data
+        return weight_data, morts_data
+    except Exception as e:
+        raise Exception(f"Excel parsing failed: {str(e)}")
 
 
-def parse_daily_sheet(filepath, sheet_name, data_type):
+def parse_daily_sheet(file_stream, sheet_name, data_type):
     """
     Parse a daily data sheet. Each flock block starts with a flock number in col 0,
     followed by rows H1..H10 and an average row. Days are columns starting at col 2.
     Returns a list of dicts: {flock, house, day, value}
     """
-    df = pd.read_excel(filepath, sheet_name=sheet_name, header=None)
+    try:
+        df = pd.read_excel(file_stream, sheet_name=sheet_name, header=None, engine='openpyxl')
 
-    # Row 2 (index 2) contains day numbers starting at col 2
-    day_row = df.iloc[2, 2:]
-    days = []
-    for val in day_row:
-        try:
-            days.append(int(float(val)))
-        except (ValueError, TypeError):
-            days.append(None)
-
-    records = []
-    current_flock = None
-
-    for i, row in df.iterrows():
-        flock_val = row[0]
-        house_val = row[1]
-
-        if pd.notna(flock_val) and str(flock_val) not in ['nan']:
+        # Row 2 (index 2) contains day numbers starting at col 2
+        day_row = df.iloc[2, 2:]
+        days = []
+        for val in day_row:
             try:
-                current_flock = int(float(flock_val))
+                days.append(int(float(val)))
             except (ValueError, TypeError):
-                pass
+                days.append(None)
 
-        if pd.isna(house_val):
-            continue
+        records = []
+        current_flock = None
 
-        house_str = str(house_val).strip()
-        if house_str == '3 C Avg':
-            house_str = '3C_AVG'
-        elif not (house_str.startswith('H') and house_str[1:].isdigit()):
-            continue
+        for i, row in df.iterrows():
+            flock_val = row[0]
+            house_val = row[1]
 
-        if current_flock is None:
-            continue
+            if pd.notna(flock_val) and str(flock_val) not in ['nan']:
+                try:
+                    current_flock = int(float(flock_val))
+                except (ValueError, TypeError):
+                    pass
 
-        for col_offset, day in enumerate(days):
-            if day is None:
-                continue
-            col_idx = col_offset + 2
-            if col_idx >= len(row):
-                continue
-            val = row[col_idx]
-            if pd.isna(val):
-                continue
-            try:
-                val = float(val)
-            except (ValueError, TypeError):
+            if pd.isna(house_val):
                 continue
 
-            records.append({
-                "flock": current_flock,
-                "house": house_str,
-                "day": day,
-                "value": val
-            })
+            house_str = str(house_val).strip()
+            if house_str == '3 C Avg':
+                house_str = '3C_AVG'
+            elif not (house_str.startswith('H') and house_str[1:].isdigit()):
+                continue
 
-    return pd.DataFrame(records)
+            if current_flock is None:
+                continue
+
+            for col_offset, day in enumerate(days):
+                if day is None:
+                    continue
+                col_idx = col_offset + 2
+                if col_idx >= len(row):
+                    continue
+                val = row[col_idx]
+                if pd.isna(val):
+                    continue
+                try:
+                    val = float(val)
+                except (ValueError, TypeError):
+                    continue
+
+                records.append({
+                    "flock": current_flock,
+                    "house": house_str,
+                    "day": day,
+                    "value": val
+                })
+
+        return pd.DataFrame(records)
+    except Exception as e:
+        raise Exception(f"Failed to parse sheet '{sheet_name}': {str(e)}")
 
 
 def get_three_cycle_avg(df_sheet):
@@ -270,27 +281,42 @@ def get_available_days(flock=None):
 # ─── Routes ───────────────────────────────────────────────────────────────────
 
 @app.route("/")
+@app.route("/index.html")
 def index():
     return send_from_directory(app.static_folder, 'index.html')
 
 
+@app.route("/<path:filename>")
+def serve_static(filename):
+    """Serve static files from public folder."""
+    return send_from_directory(app.static_folder, filename)
+
+
 @app.route("/upload", methods=["POST"])
 def upload():
-    if "file" not in request.files:
-        return jsonify({"error": "No file uploaded"}), 400
-
-    file = request.files["file"]
-    if not file.filename.endswith((".xlsx", ".xls")):
-        return jsonify({"error": "Please upload an Excel file (.xlsx or .xls)"}), 400
-
-    # Create uploads folder if it doesn't exist
-    upload_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
-    os.makedirs(upload_folder, exist_ok=True)
-    upload_path = os.path.join(upload_folder, file.filename)
-    file.save(upload_path)
-
     try:
-        weight_df, morts_df = parse_excel(upload_path)
+        if "file" not in request.files:
+            return jsonify({"error": "❌ No file uploaded"}), 400
+
+        file = request.files["file"]
+        
+        if not file or file.filename == "":
+            return jsonify({"error": "❌ No file selected"}), 400
+        
+        if not file.filename.lower().endswith((".xlsx", ".xls")):
+            return jsonify({"error": f"❌ Invalid file type. Please upload an Excel file (.xlsx or .xls), got: {file.filename}"}), 400
+
+        # Read file into memory (BytesIO)
+        file_stream = BytesIO(file.read())
+        file.seek(0)
+
+        # Parse Excel file
+        weight_df, morts_df = parse_excel(file_stream)
+        
+        if weight_df.empty:
+            return jsonify({"error": "❌ No weight data found in Excel file"}), 400
+        
+        # Store in memory
         data_store["daily_weight"] = weight_df
         data_store["daily_morts"] = morts_df
         data_store["filename"] = file.filename
@@ -304,10 +330,14 @@ def upload():
             "flocks": flocks,
             "available_days": days,
             "weight_records": len(weight_df),
-            "morts_records": len(morts_df)
-        })
+            "morts_records": len(morts_df) if morts_df is not None else 0
+        }), 200
+        
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        error_msg = str(e)
+        print(f"❌ Upload error: {error_msg}")
+        print(traceback.format_exc())
+        return jsonify({"error": f"❌ Upload failed: {error_msg}"}), 500
 
 
 @app.route("/api/query_day", methods=["GET"])
